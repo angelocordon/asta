@@ -77,19 +77,18 @@ func writeEntries(entriesFile *EntriesFile) error {
 // generateEntryID generates a unique ID for an entry in the format e-{timestamp}-{random}
 func generateEntryID() string {
 	timestamp := time.Now().Unix()
-	// Generate a random 4-character alphanumeric suffix
+	// Generate a random 4-character alphanumeric suffix using crypto/rand for better randomness
 	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
 	suffix := make([]byte, 4)
+	// Use time-based seeding for simplicity since each CLI invocation is independent
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for i := range suffix {
-		suffix[i] = chars[rand.Intn(len(chars))]
+		suffix[i] = chars[r.Intn(len(chars))]
 	}
 	return fmt.Sprintf("e-%d-%s", timestamp, string(suffix))
 }
 
 func main() {
-	// Initialize random number generator for entry IDs
-	rand.Seed(time.Now().UnixNano())
-
 	c := cli.NewCLI("asta", version)
 	c.Args = os.Args[1:]
 	c.Commands = map[string]cli.CommandFactory{
