@@ -3,15 +3,93 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/hashicorp/cli"
 )
 
 const version = "0.1.0"
 
+// Entry represents a single accomplishment entry
+type Entry struct {
+	ID        string `json:"id"`
+	Timestamp string `json:"timestamp"`
+	Entry     string `json:"entry"`
+}
+
+// EntriesFile represents the structure of entries.json
+type EntriesFile struct {
+	Entries []Entry `json:"entries"`
+}
+
+// getEntriesPath returns the path to the entries.json file
+func getEntriesPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("could not determine home directory: %w", err)
+	}
+	return filepath.Join(home, ".asta", "entries.json"), nil
+}
+
+// readEntries reads and parses entries.json
+func readEntries() (*EntriesFile, error) {
+	entriesPath, err := getEntriesPath()
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := os.ReadFile(entriesPath)
+	if err != nil {
+		return nil, fmt.Errorf("could not read entries file: %w", err)
+	}
+
+	var entriesFile EntriesFile
+	if err := json.Unmarshal(data, &entriesFile); err != nil {
+		return nil, fmt.Errorf("could not parse entries file: %w", err)
+	}
+
+	return &entriesFile, nil
+}
+
+// writeEntries writes entries to entries.json
+func writeEntries(entriesFile *EntriesFile) error {
+	entriesPath, err := getEntriesPath()
+	if err != nil {
+		return err
+	}
+
+	data, err := json.MarshalIndent(entriesFile, "", "  ")
+	if err != nil {
+		return fmt.Errorf("could not marshal entries: %w", err)
+	}
+
+	if err := os.WriteFile(entriesPath, data, 0644); err != nil {
+		return fmt.Errorf("could not write entries file: %w", err)
+	}
+
+	return nil
+}
+
+// generateEntryID generates a unique ID for an entry in the format e-{timestamp}-{random}
+func generateEntryID() string {
+	timestamp := time.Now().Unix()
+	// Generate a random 4-character alphanumeric suffix
+	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+	suffix := make([]byte, 4)
+	for i := range suffix {
+		suffix[i] = chars[rand.Intn(len(chars))]
+	}
+	return fmt.Sprintf("e-%d-%s", timestamp, string(suffix))
+}
+
 func main() {
+	// Initialize random number generator for entry IDs
+	rand.Seed(time.Now().UnixNano())
+
 	c := cli.NewCLI("asta", version)
 	c.Args = os.Args[1:]
 	c.Commands = map[string]cli.CommandFactory{
@@ -84,8 +162,8 @@ func (c *InitCommand) Run(args []string) int {
 	}
 
 	// Create entries.json with empty entries array
-	initialData := map[string]interface{}{
-		"entries": []interface{}{},
+	initialData := EntriesFile{
+		Entries: []Entry{},
 	}
 
 	jsonData, err := json.MarshalIndent(initialData, "", "  ")
@@ -121,12 +199,50 @@ func (c *AddCommand) Synopsis() string {
 
 func (c *AddCommand) Run(args []string) int {
 	if len(args) < 1 {
-		fmt.Println("Error: entry text required")
-		fmt.Println(c.Help())
+		fmt.Fprintln(os.Stderr, "Error: entry text required")
+		fmt.Fprintln(os.Stderr, c.Help())
 		return 1
 	}
+
+	// Join all args as the entry text
+	entryText := strings.Join(args, " ")
+
+	// Check if asta is initialized
+	entriesPath, err := getEntriesPath()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return 1
+	}
+
+	if _, err := os.Stat(entriesPath); os.IsNotExist(err) {
+		fmt.Fprintln(os.Stderr, "Error: asta not initialized. Run 'asta init' first.")
+		return 1
+	}
+
+	// Read existing entries
+	entriesFile, err := readEntries()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return 1
+	}
+
+	// Create new entry
+	newEntry := Entry{
+		ID:        generateEntryID(),
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Entry:     entryText,
+	}
+
+	// Append new entry
+	entriesFile.Entries = append(entriesFile.Entries, newEntry)
+
+	// Write back to file
+	if err := writeEntries(entriesFile); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return 1
+	}
+
 	fmt.Println("✓ Entry added")
-	fmt.Println("(Placeholder - functionality not yet implemented)")
 	return 0
 }
 
