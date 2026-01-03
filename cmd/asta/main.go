@@ -77,6 +77,10 @@ func (c *InitCommand) Run(args []string) int {
 		fmt.Println("✓ Initialized asta at ~/.asta")
 		fmt.Println("  (Repository already initialized)")
 		return 0
+	} else if !os.IsNotExist(err) {
+		// Some other error occurred (permissions, etc.)
+		fmt.Fprintf(os.Stderr, "Error: Could not check file %s: %v\n", entriesFile, err)
+		return 1
 	}
 
 	// Create entries.json with empty entries array
