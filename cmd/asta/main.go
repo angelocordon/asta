@@ -39,7 +39,7 @@ func main() {
 	os.Exit(exitStatus)
 }
 
-// InitCommand is a placeholder for the init command
+// InitCommand implements the init command for initializing the asta repository
 type InitCommand struct{}
 
 func (c *InitCommand) Help() string {
